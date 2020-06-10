@@ -44,6 +44,7 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, reference_genom
             
 
 def geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile, max_depth, reference_genome, validate_sequence_length, ed_threas):
+    
     # if the #sequence read is over the `maxDepth`, then that key is ignored
     depthFlag = 0
     if bamfile.count(juncChr1, int(juncPos1) - 1, int(juncPos1) + 1) >= max_depth: depthFlag = 1
@@ -59,150 +60,13 @@ def geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile
     target_seq2 = getTargetSeq(juncChr2, juncPos2, juncDir2, juncSeq, reference_genome, validate_sequence_length, f_inversion)
     target_seq1 = getTargetSeq(juncChr1, juncPos1, juncDir1, juncSeq, reference_genome, validate_sequence_length, f_inversion)
                 
-    tmp_seq1 = ""
-    tmp_ed1 = 100
-    target_softclip1 = ""
-    count_other1 = 0     
-    count_junc1 = 0   
-    for read in bamfile.fetch(juncChr1, max(0, int(juncPos1) - 1), int(juncPos1) + 1):
-
-        # get the flag information
-        flags = format(int(read.flag), "#014b")[:1:-1]
-
-        # skip unmapped read 
-        if flags[2] == "1" or flags[3] == "1": continue 
-
-        # skip supplementary alignment
-        if flags[8] == "1" or flags[11] == "1": continue
-
-        # skip duplicated reads
-        if flags[10] == "1": continue
+    softclipping1, count_junc1, count_other1 = \
+    getTargetSoftclipAndDominant(bamfile, juncChr1, juncPos1, juncDir1, target_seq2, ed_threas)
     
-        chr_current = bamfile.getrname(read.tid)
-        pos_current = int(read.pos + 1)
-        dir_current = ("-" if flags[4] == "1" else "+")
-        chr_pair = bamfile.getrname(read.rnext)
-        pos_pair = int(read.pnext + 1)
-        dir_pair = ("-" if flags[5] == "1" else "+")
-
-        # M	BAM_CMATCH	0
-        # I BAM_CINS	1
-        # D	BAM_CDEL	2
-        # S	BAM_CSOFT_CLIP	4
-        # [(0, 52), (4, 24)]
-        # result = 'even' if a % 2 == 0 else 'odd'
-        cigars= read.cigartuples
-        cigar_target = cigars[-1] if juncDir1 == "+" else cigars[0]
-        clipped_size = cigar_target[1] if int(cigar_target[0]) == 4 else 0 
-        
-        if clipped_size < 10: continue
-        
-        # TODO
-        # is the softclipping breakpoint within 10 bp of the junction?
-        tmp_seq = ""
-        if juncDir1 == "+":
-            tmp_seq = read.seq[-(clipped_size):]
-        else:
-            tmp_seq = read.seq[:clipped_size]
-        seq = ""
-        # if flags[4] == "1":
-        #     seq = utils.reverseComplement(str(tmp_seq))
-        # else:
-        seq = tmp_seq
-
-        ret = edlib.align(seq, target_seq2, mode="HW", task="path")
-        ed = ret["editDistance"]
-
-        print("----------")
-        print(ed)
-        print(tmp_ed1)
-        print(seq)
-        print(tmp_seq1)
-        if len(tmp_seq1) == 0 or ((int(ed) / len(tmp_seq1)) < tmp_ed1) or ((int(ed) / len(tmp_seq1)) == tmp_ed1 and len(seq) >= len(tmp_seq1)):
-            if len(seq) >= 10:
-                tmp_seq1 = seq
-                tmp_ed1 = (int(ed) / len(tmp_seq1))
-                
-        # print (cigars)
-        # print (clipped_size)
-        # print (seq)
-        # print (target_seq2)
-        # print (ed)
-        if ed != 0 and (ed/clipped_size) > ed_threas:
-            count_other1 += 1
-        else:
-            count_junc1 += 1
-
-    tmp_seq2 = ""
-    tmp_ed2 = 100        
-    count_other2 = 0
-    count_junc2 = 0     
-    for read in bamfile.fetch(juncChr2, max(0, int(juncPos2) - 1), int(juncPos2) + 1):
-
-        # get the flag information
-        flags = format(int(read.flag), "#014b")[:1:-1]
-
-        # skip unmapped read 
-        if flags[2] == "1" or flags[3] == "1": continue 
-
-        # skip supplementary alignment
-        if flags[8] == "1" or flags[11] == "1": continue
-
-        # skip duplicated reads
-        if flags[10] == "1": continue
+    softclipping2, count_junc2, count_other2 = \
+    getTargetSoftclipAndDominant(bamfile, juncChr2, juncPos2, juncDir2, target_seq1, ed_threas)
     
-        chr_current = bamfile.getrname(read.tid)
-        pos_current = int(read.pos + 1)
-        dir_current = ("-" if flags[4] == "1" else "+")
-        chr_pair = bamfile.getrname(read.rnext)
-        pos_pair = int(read.pnext + 1)
-        dir_pair = ("-" if flags[5] == "1" else "+")
-
-        # M	BAM_CMATCH	0
-        # I BAM_CINS	1
-        # D	BAM_CDEL	2
-        # S	BAM_CSOFT_CLIP	4
-        # [(0, 52), (4, 24)]
-        # result = 'even' if a % 2 == 0 else 'odd'
-        cigars= read.cigartuples
-        cigar_target = cigars[-1] if juncDir2 == "+" else cigars[0]
-        clipped_size = cigar_target[1] if int(cigar_target[0]) == 4 else 0 
-
-        if clipped_size < 10: continue
-
-        # TODO
-        # consider insert seq.
-        # is the softclipping breakpoint within 10 bp of the junction?
-        tmp_seq = ""
-        if juncDir2 == "+":
-            tmp_seq = read.seq[-(clipped_size):]
-        else:
-            tmp_seq = read.seq[:clipped_size]
-        seq = ""
-        # if flags[4] == "1":
-        #     seq = utils.reverseComplement(str(tmp_seq))
-        # else:
-        seq = tmp_seq
-
-        ret = edlib.align(seq, target_seq1, mode="HW", task="path")
-        ed = ret["editDistance"]
-
-        # print (cigars)
-        # print (clipped_size)
-        # print (seq)
-        # print (target_seq1)
-        # print (ed)
-        if ed != 0 and (ed/clipped_size) > ed_threas:
-            count_other2 += 1
-        else:
-            count_junc2 += 1
-
-        if len(tmp_seq2) == 0 or ((int(ed) / len(tmp_seq2)) < tmp_ed2) or ((int(ed) / len(tmp_seq2)) == tmp_ed2 and len(seq) >= len(tmp_seq2)):
-                tmp_seq2 = seq
-                tmp_ed2 = (int(ed) / len(tmp_seq2))
-                
-    return([tmp_seq1, count_junc1, count_other1, tmp_seq2, count_junc2, count_other2]) 
-
+    return([softclipping1, count_junc1, count_other1, softclipping2, count_junc2, count_other2]) 
 
 
 def getTargetSeq(juncChr, juncPos, targetDir, juncSeq, reference_genome, validate_sequence_length, f_inversion):
@@ -219,10 +83,75 @@ def getTargetSeq(juncChr, juncPos, targetDir, juncSeq, reference_genome, validat
     if f_inversion == True:
         seq = utils.reverseComplement(seq)
 
-
     return seq
+    
+
+def getTargetSoftclipAndDominant(bamfile, juncChr, juncPos, juncDir, target_seq, ed_threas):
+    
+    ret_seq = ""
+    ret_ed = 100
+    ret_softclip = ""
+    count_other = 0     
+    count_junc = 0   
+    for read in bamfile.fetch(juncChr, max(0, int(juncPos) - 1), int(juncPos) + 1):
+
+        # get the flag information
+        flags = format(int(read.flag), "#014b")[:1:-1]
+
+        # skip unmapped read 
+        if flags[2] == "1" or flags[3] == "1": continue 
+
+        # skip supplementary alignment
+        if flags[8] == "1" or flags[11] == "1": continue
+
+        # skip duplicated reads
+        if flags[10] == "1": continue
+    
+        # M	BAM_CMATCH	0
+        # I BAM_CINS	1
+        # D	BAM_CDEL	2
+        # S	BAM_CSOFT_CLIP	4
+        # [(0, 52), (4, 24)]
+        # result = 'even' if a % 2 == 0 else 'odd'
+        cigars= read.cigartuples
+        cigar_target = cigars[-1] if juncDir == "+" else cigars[0]
+        clipped_size = cigar_target[1] if int(cigar_target[0]) == 4 else 0 
+        
+        if clipped_size < 10: continue
+        
+        # TODO
+        # is the softclipping breakpoint within 10 bp of the junction?
+        tmp_seq = ""
+        if juncDir == "+":
+            tmp_seq = read.seq[-(clipped_size):]
+        else:
+            tmp_seq = read.seq[:clipped_size]
+        seq = ""
+        # if flags[4] == "1":
+        #     seq = utils.reverseComplement(str(tmp_seq))
+        # else:
+        seq = tmp_seq
+
+        ret = edlib.align(seq, target_seq, mode="HW", task="path")
+        ed = ret["editDistance"]
+
+        if len(ret_seq) == 0 or ((int(ed) / len(ret_seq)) < ret_ed) or ((int(ed) / len(ret_seq)) == ret_ed and len(seq) >= len(ret_seq)):
+            ret_seq = seq
+            ret_ed = (int(ed) / len(seq))
+                
+        # print (cigars)
+        # print (clipped_size)
+        # print (seq)
+        # print (target_seq2)
+        # print (ed)
+        if ed != 0 and (ed/clipped_size) > ed_threas:
+            count_other += 1
+        else:
+            count_junc += 1
+            
+    return([ret_seq, count_junc, count_other]) 
+
 
 def curation_main(args):
 
     curation1(args.in_sv, args.in_bam1, args.in_bam2, args.output, args.margin, args.ref_genome, args.max_depth, args.validate_sequence_length)
-
