@@ -26,24 +26,24 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, reference_genom
             juncDir2 = F[5]
             juncSeq = F[6]
             target_seq1, count_junc1, count_other1, target_seq2, count_junc2, count_other2 = \
-            geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile1, max_depth, reference_genome, validate_sequence_length, ed_threas)
+            geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile1, max_depth, reference_genome, validate_sequence_length, ed_threas, margin)
             
-            dominant1 = "---"
+            dominant1 = 0.0
             if count_junc1+count_other1 > 0:
-                diminant1 = count_junc1 / (count_junc1+count_other1)
-            dominant2 = "---"
+                dominant1 = count_junc1 / (count_junc1+count_other1)
+            dominant2 = 0.0
             if count_junc2+count_other2 > 0:
                 dominant2 = count_junc2 / (count_junc2+count_other2)
 
             target_seq1_2, count_junc1_2, count_other1_2, target_seq2_2, count_junc2_2, count_other2_2 = \
-            geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile2, max_depth, reference_genome, validate_sequence_length, ed_threas)
+            geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile2, max_depth, reference_genome, validate_sequence_length, ed_threas, margin)
 
-            print(line +"\t"+target_seq1+"\t"+target_seq2+"\t"+str(round(diminant1,4))+"\t"+str(round(dominant2,4))+"\t"+str(count_junc1_2) +"\t"+ str(count_junc2_2),file=hout)
+            print(line +"\t"+target_seq1+"\t"+target_seq2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))+"\t"+str(count_junc1_2) +"\t"+ str(count_junc2_2),file=hout)
           
     hout.close  
             
 
-def geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile, max_depth, reference_genome, validate_sequence_length, ed_threas):
+def geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile, max_depth, reference_genome, validate_sequence_length, ed_threas, margin):
     
     # if the #sequence read is over the `maxDepth`, then that key is ignored
     depthFlag = 0
@@ -61,10 +61,10 @@ def geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile
     target_seq1 = getTargetSeq(juncChr1, juncPos1, juncDir1, juncSeq, reference_genome, validate_sequence_length, f_inversion)
                 
     softclipping1, count_junc1, count_other1 = \
-    getTargetSoftclipAndDominant(bamfile, juncChr1, juncPos1, juncDir1, target_seq2, ed_threas)
+    getTargetSoftclipAndDominant(bamfile, juncChr1, juncPos1, juncDir1, target_seq2, ed_threas, margin)
     
     softclipping2, count_junc2, count_other2 = \
-    getTargetSoftclipAndDominant(bamfile, juncChr2, juncPos2, juncDir2, target_seq1, ed_threas)
+    getTargetSoftclipAndDominant(bamfile, juncChr2, juncPos2, juncDir2, target_seq1, ed_threas, margin)
     
     return([softclipping1, count_junc1, count_other1, softclipping2, count_junc2, count_other2]) 
 
@@ -86,14 +86,13 @@ def getTargetSeq(juncChr, juncPos, targetDir, juncSeq, reference_genome, validat
     return seq
     
 
-def getTargetSoftclipAndDominant(bamfile, juncChr, juncPos, juncDir, target_seq, ed_threas):
+def getTargetSoftclipAndDominant(bamfile, juncChr, juncPos, juncDir, target_seq, ed_threas, mergin):
     
     ret_seq = ""
     ret_ed = 100
-    ret_softclip = ""
     count_other = 0     
     count_junc = 0   
-    for read in bamfile.fetch(juncChr, max(0, int(juncPos) - 1), int(juncPos) + 1):
+    for read in bamfile.fetch(juncChr, max(0, int(juncPos) - mergin), int(juncPos) + mergin):
 
         # get the flag information
         flags = format(int(read.flag), "#014b")[:1:-1]
@@ -135,19 +134,21 @@ def getTargetSoftclipAndDominant(bamfile, juncChr, juncPos, juncDir, target_seq,
         ret = edlib.align(seq, target_seq, mode="HW", task="path")
         ed = ret["editDistance"]
 
-        if len(ret_seq) == 0 or ((int(ed) / len(ret_seq)) < ret_ed) or ((int(ed) / len(ret_seq)) == ret_ed and len(seq) >= len(ret_seq)):
-            ret_seq = seq
-            ret_ed = (int(ed) / len(seq))
+        if (ed/clipped_size) <= ed_threas:
+            if len(seq) > len(ret_seq) or (len(seq) == len(ret_seq) and (ed/clipped_size) < ret_ed):
+                ret_seq = seq
+                ret_ed = (ed/clipped_size)
                 
         # print (cigars)
         # print (clipped_size)
         # print (seq)
         # print (target_seq2)
         # print (ed)
-        if ed != 0 and (ed/clipped_size) > ed_threas:
-            count_other += 1
-        else:
+        if (ed/clipped_size) <= ed_threas:
             count_junc += 1
+        else:
+            count_other += 1
+            
             
     return([ret_seq, count_junc, count_other]) 
 
