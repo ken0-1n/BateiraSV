@@ -17,7 +17,7 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
         for line in hin: 
             line = line.rstrip('\n')
             if line.startswith("Chr_1"):
-                print(line+"\ttarget_soft_clipping1\ttarget_softclipping2\tdominant1\tdominant2\tsoftclip_in_normal2\tsoftclip_in_normal2", file=hout)
+                print(line+"\ttarget_softclipping1\ttarget_softclipping2\tdominant1\tdominant2\tsoftclip_in_normal1\tsoftclip_in_normal2", file=hout)
                 continue  # for geomonSV results
             F = line.split('\t')
 
@@ -34,36 +34,47 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             target_seq1 = getTargetSeq(juncChr1, juncPos1, juncDir1, juncSeq, reference_genome, \
                         validate_sequence_length, validate_sequence_minus_length, f_inversion)
     
-            ## bam1 start ############
-
             ret_code = checkBamDepth(bamfile1, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, max_depth)
             
             dataframe1 = getTargetDataFrame(bamfile1, juncChr1, juncPos1, juncDir1, \
                 target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
     
-            print("----------")
+            dominant_group1, dominant1, target_softclip1= getDominantGroup(dataframe1, ed_threas)
             
-            h_group = {}
-            for df in dataframe1:
-                # print(df)
-                if len(df["soctclipseq"]) < 10: continue
-                if df["exactposition"] in h_group:
-                    h_group[df["exactposition"]] += 1
-                else:
-                    h_group[df["exactposition"]] = 1
-            
-            print(h_group)        
-
-    
             dataframe2 = getTargetDataFrame(bamfile1, juncChr2, juncPos2, juncDir2, \
                 target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+
+            dominant_group2, dominant2, target_softclip2 = getDominantGroup(dataframe2, ed_threas)
             
-            ## bam1 end ############
             
-            # target_seq1_2, count_junc1_2, count_other1_2, target_seq2_2, count_junc2_2, count_other2_2 = \
-            # geted(juncChr1,juncPos1,juncDir1,juncChr2,juncPos2,juncDir2,juncSeq, bamfile2, max_depth, reference_genome, validate_sequence_length, ed_threas, margin)
+            # print("----------------------------------------------")
+            # print(juncChr1)
+            # print(juncPos1)            
+            # print("dominant_group1: "+str(dominant_group1))
+            # print("dominant1: "+str(dominant1))
+            # print("target_softclip1: "+str(target_softclip1))
+            
+            # print("----------------------------------------------")
+            # print(juncChr2)
+            # print(juncPos2)
+            # print("dominant_group2: "+str(dominant_group2))
+            # print("dominant2: "+str(dominant2))
+            # print("target_softclip2: "+str(target_softclip2))
+
+            ret_code = checkBamDepth(bamfile2, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, max_depth)
+
+            dataframe1_2 = getTargetDataFrame(bamfile2, juncChr1, juncPos1, juncDir1, \
+                target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+            
+            target_count1_2 = getDominantReadCount(dataframe1_2, dominant_group1, ed_threas)
+            
+            dataframe2_2 = getTargetDataFrame(bamfile2, juncChr2, juncPos2, juncDir2, \
+                target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+                
+            target_count2_2 = getDominantReadCount(dataframe2_2, dominant_group2, ed_threas)
+                
             # print(line +"\t"+target_seq1+"\t"+target_seq2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4)),file=hout)
-            # print(line +"\t"+target_seq1+"\t"+target_seq2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))+"\t"+str(count_junc1_2) +"\t"+ str(count_junc2_2),file=hout)
+            print(line +"\t"+target_softclip1+"\t"+target_softclip2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))+"\t"+str(target_count1_2) +"\t"+ str(target_count2_2),file=hout)
           
     hout.close  
             
@@ -72,14 +83,13 @@ def getTargetSeq(juncChr, juncPos, targetDir, juncSeq, reference_genome, validat
     if juncSeq == "---": juncSeq = ""
     
     if targetDir == "+":
-        seq = utils.get_seq(reference_genome, juncChr, int(juncPos) - validate_sequence_length, int(juncPos) ) 
+        seq = utils.get_seq(reference_genome, juncChr, int(juncPos) - validate_sequence_length + 1 , int(juncPos) ) 
         seq = seq + juncSeq
         seq = seq + utils.get_seq(reference_genome, juncChr, int(juncPos) + 1, int(juncPos) + validate_sequence_minus_length) 
     else:
-        seq = utils.get_seq(reference_genome, juncChr, int(juncPos) - validate_sequence_minus_length, int(juncPos) -1 ) 
+        seq = utils.get_seq(reference_genome, juncChr, int(juncPos) - validate_sequence_minus_length , int(juncPos) -1 ) 
         seq = seq + juncSeq
-        seq = seq + utils.get_seq(reference_genome, juncChr, int(juncPos), int(juncPos) + validate_sequence_length) 
-
+        seq = seq + utils.get_seq(reference_genome, juncChr, int(juncPos), int(juncPos) + validate_sequence_length - 1) 
     if f_inversion == True:
         seq = utils.reverseComplement(seq)
 
@@ -95,6 +105,70 @@ def checkBamDepth(bamfile, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, jun
     if depthFlag == 1:
         print("sequence depth exceeds the threshould for: " + ','.join([juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2]), file = sys.stderr)
         return 1 
+
+
+def getDominantGroup(dataframe, ed_threas):
+    
+    h_group = {}
+    for df in dataframe:
+        exact_pos = df["exactposition"]
+        softclip_len = len(df["softclipseq"])
+        basematch = df["basematch"]
+        if (basematch / softclip_len) < ed_threas:
+            exact_pos = exact_pos-1000 
+        if exact_pos in h_group:
+            h_group[exact_pos] += 1
+        else:
+            h_group[exact_pos] = 1
+    
+    target_group = "---"
+    target_value = 0
+    other_value = 0
+    f_target = True
+    for key, value in sorted(h_group.items(), key=lambda x: -x[1]):
+        if  f_target == True:
+            target_group = key
+            target_value = int(value)
+            f_target = False
+        else:
+            other_value += int(value)
+
+    dominant = 0
+    if target_value > 0 or other_value > 0:
+        dominant = target_value / (target_value + other_value)  
+
+    ret_seq = "---"    
+    for df in dataframe:
+        if df["exactposition"] == target_group:
+            softclip_len = len(df["softclipseq"])
+            basematch = df["basematch"]
+            if (basematch / softclip_len) < ed_threas: continue
+        
+            if len(df["softclipseq"]) > len(ret_seq):
+                ret_seq = df["softclipseq"]
+
+    return([target_group, dominant, ret_seq])
+
+
+def getDominantReadCount(dataframe, target_group, ed_threas):
+    
+    h_group = {}
+    for df in dataframe:
+        exact_pos = df["exactposition"]
+        softclip_len = len(df["softclipseq"])
+        basematch = df["basematch"]
+        if (basematch / softclip_len) < ed_threas:
+            exact_pos = exact_pos-1000 
+        if exact_pos in h_group:
+            h_group[exact_pos] += 1
+        else:
+            h_group[exact_pos] = 1
+    
+    read_count = 0
+    if target_group in h_group:
+        read_count = h_group[target_group]
+
+    return read_count
 
 
 def getTargetDataFrame(bamfile, juncChr, juncPos, juncDir, target_seq, mergin, validate_sequence_length, validate_sequence_minus_length, juncSeq):
@@ -127,63 +201,49 @@ def getTargetDataFrame(bamfile, juncChr, juncPos, juncDir, target_seq, mergin, v
         cigar_target = cigars[-1] if juncDir == "+" else cigars[0]
         clipped_size = cigar_target[1] if int(cigar_target[0]) == 4 else 0 
         
-        if clipped_size == 0: continue
-
+        if clipped_size < 10: continue
+    
+        # softclip seq, softclip pos
         softclipseq = ""
-        if juncDir == "+":
-            softclipseq = read.seq[-(clipped_size):]
-        else:
-            softclipseq = read.seq[:clipped_size]
-
-        # softcclip pogision
         softclip_bp_pos = 0
         if juncDir == "+":
+            softclipseq = read.seq[-(clipped_size):]
             softclip_bp_pos = read.aend
         else:
+            softclipseq = read.seq[:clipped_size]
             softclip_bp_pos = read.pos + 1
+
+        if abs(softclip_bp_pos - int(juncPos)) > mergin: continue 
 
         # edlib
         ret = edlib.align(softclipseq, target_seq, mode="HW", task="path")
         ed = ret["editDistance"]
-        ed_locations = ret["locations"]
-
+        ed_locat = ret["locations"]
+        # print(ret)
+        # nice = edlib.getNiceAlignment(ret, softclipseq, target_seq)
+        # print(nice)
         # target alignment position
-        alignment_start_pos = ""
-        alignment_end_pos = ""
-        number_of_bases_matched = -1000
-        multi_blocks = False 
-        # if len(ed_locations) == 1:
         ed_idx = -1
-        ed_match = -1
-        for index, locate in enumerate(ed_locations):
-            alignment_match = ed_locations[index][1] - ed_locations[index][0]
-            if alignment_match > ed_match:
-                ed_idx = index
-                ed_match = alignment_match
-            
-        if ((ed_locations[ed_idx][1] - ed_locations[ed_idx][0]) / len(softclipseq)) > 0.8:
-            if juncDir == "+":
-                alignment_start_pos = ed_locations[ed_idx][0] - validate_sequence_minus_length
-                alignment_end_pos = ed_locations[ed_idx][1] - validate_sequence_minus_length
-            else:
-                alignment_start_pos = (ed_locations[ed_idx][1] - validate_sequence_length)*-1
-                alignment_end_pos = (ed_locations[ed_idx][0] - validate_sequence_length)*-1
-            number_of_bases_matched = alignment_end_pos - alignment_start_pos
-        else:
-            multi_blocks = True
-    
+        for tmp_index, locate in enumerate(ed_locat):
+            if len(softclipseq) == (ed_locat[tmp_index][1] - ed_locat[tmp_index][0] + 1):
+                ed_idx = tmp_index
+                break
+                
         # exact position        
-        exact_position = -1000
-        if multi_blocks == False:
-            if juncDir == "+":
-                exact_position = int(alignment_start_pos) + (int(juncPos) - softclip_bp_pos)
-            else:
-                exact_position = int(alignment_start_pos) + len(juncSeq) - (int(juncPos) - softclip_bp_pos)
+        exact_position = 0
+        if juncDir == "+":
+            alignment_start_pos = ed_locat[ed_idx][0] - validate_sequence_minus_length
+            alignment_end_pos = ed_locat[ed_idx][1] - validate_sequence_minus_length
+            exact_position = int(alignment_start_pos) + (int(juncPos) - softclip_bp_pos)
+        else:
+            alignment_start_pos = (ed_locat[ed_idx][1] - (validate_sequence_length - 1)) * -1
+            alignment_end_pos = (ed_locat[ed_idx][0] - (validate_sequence_length - 1)) * -1 
+            exact_position = int(alignment_start_pos) + len(juncSeq) - (int(juncPos) - softclip_bp_pos)
             
-        h_ret = {"readid":read.qname, "soctclipseq":softclipseq, "direction":juncDir, "juncseq":juncSeq, \
-        "junctionpos":juncPos, "softclipstart": softclip_bp_pos, "multiblocks": multi_blocks, \
-        "location": (alignment_start_pos, alignment_end_pos), "cigars": cigars, "locations":ed_locations, \
-        "basematch": number_of_bases_matched, "editdistance": ed, "exactposition": exact_position}
+        # data frame
+        h_ret = {"readid":read.qname, "softclipseq":softclipseq, "direction":juncDir, "juncseq":juncSeq, \
+        "junctionpos":juncPos, "softclipstart": softclip_bp_pos,  \
+        "basematch": len(softclipseq) - ed, "editdistance": ed, "exactposition": exact_position}
         
         target_dataframe.append(h_ret)
             
