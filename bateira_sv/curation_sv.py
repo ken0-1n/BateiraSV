@@ -7,7 +7,7 @@ from . import utils
 def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             reference_genome, max_depth, \
             validate_sequence_length, validate_sequence_minus_length, \
-            ed_threas):
+            ed_threas, min_mapping_quality):
 
     bamfile1 = pysam.Samfile(in_bam1, 'rb')
     bamfile2 = pysam.Samfile(in_bam2, 'rb')
@@ -17,7 +17,7 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
         for line in hin: 
             line = line.rstrip('\n')
             if line.startswith("Chr_1"):
-                print(line+"\ttarget_softclipping1\ttarget_softclipping2\tdominant1\tdominant2\tsoftclip_in_normal1\tsoftclip_in_normal2", file=hout)
+                print(line+"\ttarget_softclipping1\ttarget_softclipping2\tdominant1\tdominant2\tsoftclip_in_tumor1\tsoftclip_in_tumor2\tsoftclip_in_normal1\tsoftclip_in_normal2", file=hout)
                 continue  # for geomonSV results
             F = line.split('\t')
 
@@ -37,14 +37,18 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             ret_code = checkBamDepth(bamfile1, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, max_depth)
             
             dataframe1 = getTargetDataFrame(bamfile1, juncChr1, juncPos1, juncDir1, \
-                target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+                target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
     
             dominant_group1, dominant1, target_softclip1= getDominantGroup(dataframe1, ed_threas)
+
+            target_count1 = getDominantReadCount(dataframe1, dominant_group1, ed_threas)
             
             dataframe2 = getTargetDataFrame(bamfile1, juncChr2, juncPos2, juncDir2, \
-                target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+                target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
 
             dominant_group2, dominant2, target_softclip2 = getDominantGroup(dataframe2, ed_threas)
+
+            target_count2 = getDominantReadCount(dataframe2, dominant_group2, ed_threas)
             
             
             # print("----------------------------------------------")
@@ -64,17 +68,18 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             ret_code = checkBamDepth(bamfile2, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, max_depth)
 
             dataframe1_2 = getTargetDataFrame(bamfile2, juncChr1, juncPos1, juncDir1, \
-                target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+                target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
             
             target_count1_2 = getDominantReadCount(dataframe1_2, dominant_group1, ed_threas)
             
             dataframe2_2 = getTargetDataFrame(bamfile2, juncChr2, juncPos2, juncDir2, \
-                target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq)
+                target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
                 
             target_count2_2 = getDominantReadCount(dataframe2_2, dominant_group2, ed_threas)
                 
             # print(line +"\t"+target_seq1+"\t"+target_seq2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4)),file=hout)
-            print(line +"\t"+target_softclip1+"\t"+target_softclip2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))+"\t"+str(target_count1_2) +"\t"+ str(target_count2_2),file=hout)
+            print(line +"\t"+target_softclip1+"\t"+target_softclip2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))
+                +"\t"+str(target_count1) +"\t"+str(target_count2) +"\t"+str(target_count1_2) +"\t"+ str(target_count2_2),file=hout)
           
     hout.close  
             
@@ -171,12 +176,15 @@ def getDominantReadCount(dataframe, target_group, ed_threas):
     return read_count
 
 
-def getTargetDataFrame(bamfile, juncChr, juncPos, juncDir, target_seq, mergin, validate_sequence_length, validate_sequence_minus_length, juncSeq):
+def getTargetDataFrame(bamfile, juncChr, juncPos, juncDir, target_seq, mergin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality):
 
     if juncSeq == "---": juncSeq = ""
     
     target_dataframe = []
     for read in bamfile.fetch(juncChr, max(0, int(juncPos) - mergin), int(juncPos) + mergin):
+
+        # get mapq
+        if read.mapq <= min_mapping_quality: continue
 
         # get the flag information
         flags = format(int(read.flag), "#014b")[:1:-1]
@@ -250,9 +258,41 @@ def getTargetDataFrame(bamfile, juncChr, juncPos, juncDir, target_seq, mergin, v
     return target_dataframe
 
 
+def getColorSupportRead(bamfile, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, mergin):
+
+    colors_read = 0
+    for read in bamfile.fetch(juncChr1, max(0, int(juncPos1) - mergin), int(juncPos1) + mergin):
+
+        # get the flag information
+        flags = format(int(read.flag), "#014b")[:1:-1]
+
+        # skip unmapped read 
+        if flags[2] == "1" or flags[3] == "1": continue 
+
+        # skip supplementary alignment
+        if flags[8] == "1" or flags[11] == "1": continue
+
+        # skip duplicated reads
+        if flags[10] == "1": continue
+    
+        chr_current = bamfile.getrname(read.tid)
+        pos_current = int(read.pos + 1)
+        dir_current = ("-" if flags[4] == "1" else "+")
+        chr_pair = bamfile.getrname(read.rnext)
+        pos_pair = int(read.pnext + 1)
+        dir_pair = ("-" if flags[5] == "1" else "+")
+
+        if juncChr2 == chr_pair and juncDir2 == dir_pair:
+            if dir_pair == "+":
+                if juncPos2 - 1000 < pos_pair and pos_pair < juncPos2 + 20:
+                    colors_read += 1
+            else:
+                if juncPos2 - 20 < pos_pair and pos_pair < juncPos2 + 1000:
+                    colors_read += 1
+
 def curation_main(args):
 
     curation1(args.in_sv, args.in_bam1, args.in_bam2, args.output, args.margin, \
             args.ref_genome, args.max_depth, \
             args.validate_sequence_length, args.validate_sequence_minus_length,
-            args.ed_threashold)
+            args.ed_threashold, args.min_mapping_quality)

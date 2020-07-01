@@ -29,7 +29,8 @@ def create_parser():
         curate_parser.add_argument("--validate_sequence_length", help = "Length of sequences for validation (each from the breakpoint) (default: %(default)s)", type = int, default = 200)
         curate_parser.add_argument("--validate_sequence_minus_length", help = "Length of sequences for validation (each from the breakpoint) (default: %(default)s)", type = int, default = 20)
         curate_parser.add_argument("--ed_threashold", help = "The threashols of the edit distance", type = float, default = 0.05)
-   
+        curate_parser.add_argument("--min_mapping_quality", help = "The minimum mapping quality", type = int, default = 10)
+        
         return curate_parser
 
     curate_parser = _create_curate_parser(subparsers)
