@@ -21,7 +21,7 @@ def create_parser():
         curate_parser = subparsers.add_parser("curation", help = "Curate the SV results")
         curate_parser.add_argument("--in_sv", help = "The result of SV", type = str, required=True)
         curate_parser.add_argument("--in_bam1", help = "The first of the bum files (usually a tumor)", type = str, required=True)
-        curate_parser.add_argument("--in_bam2", help = "The second of the bum files (usually a normal)", type = str, required=True)
+        curate_parser.add_argument("--in_bam2", help = "The second of the bum files (usually a normal)", type = str)
         curate_parser.add_argument("--output", help = "The output file", type = str, required=True)
         curate_parser.add_argument("--margin", help = "The margin for comparing SVs and SVs", type = int, default = 20)
         curate_parser.add_argument("--ref_genome", help = "The path to the reference genomoe sequence", type=str)
@@ -30,6 +30,7 @@ def create_parser():
         curate_parser.add_argument("--validate_sequence_minus_length", help = "Length of sequences for validation (each from the breakpoint) (default: %(default)s)", type = int, default = 20)
         curate_parser.add_argument("--ed_threashold", help = "The threashols of the edit distance", type = float, default = 0.05)
         curate_parser.add_argument("--min_mapping_quality", help = "The minimum mapping quality", type = int, default = 10)
+        curate_parser.add_argument("--bedpe", default = False, action = 'store_true', help = "The in_sv is bedpe format")
         
         return curate_parser
 

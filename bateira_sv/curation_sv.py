@@ -7,10 +7,11 @@ from . import utils
 def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             reference_genome, max_depth, \
             validate_sequence_length, validate_sequence_minus_length, \
-            ed_threas, min_mapping_quality):
+            ed_threas, min_mapping_quality, f_bedpe):
 
     bamfile1 = pysam.Samfile(in_bam1, 'rb')
-    bamfile2 = pysam.Samfile(in_bam2, 'rb')
+    if in_bam2 != None:
+        bamfile2 = pysam.Samfile(in_bam2, 'rb')
     
     hout = open(output_file, 'w')
     with open(input_file, "r") as hin:
@@ -23,6 +24,9 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
 
             juncChr1,juncPos1,juncDir1  = F[0], F[1], F[2]
             juncChr2,juncPos2,juncDir2  = F[3], F[4], F[5]
+            if f_bedpe == True:
+                juncChr1,juncPos1,juncDir1  = F[0], F[2], F[9]
+                juncChr2,juncPos2,juncDir2  = F[3], F[5], F[10]
             juncSeq = F[6]
             
             f_inversion = False
@@ -54,6 +58,7 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             # print("----------------------------------------------")
             # print(juncChr1)
             # print(juncPos1)            
+            # print(juncDir1)            
             # print("dominant_group1: "+str(dominant_group1))
             # print("dominant1: "+str(dominant1))
             # print("target_softclip1: "+str(target_softclip1))
@@ -61,25 +66,31 @@ def curation1(input_file, in_bam1, in_bam2, output_file, margin, \
             # print("----------------------------------------------")
             # print(juncChr2)
             # print(juncPos2)
+            # print(juncDir2)
             # print("dominant_group2: "+str(dominant_group2))
             # print("dominant2: "+str(dominant2))
             # print("target_softclip2: "+str(target_softclip2))
 
-            ret_code = checkBamDepth(bamfile2, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, max_depth)
+            if in_bam2 != None:
+                ret_code = checkBamDepth(bamfile2, juncChr1, juncPos1, juncDir1, juncChr2, juncPos2, juncDir2, max_depth)
 
-            dataframe1_2 = getTargetDataFrame(bamfile2, juncChr1, juncPos1, juncDir1, \
-                target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
+                dataframe1_2 = getTargetDataFrame(bamfile2, juncChr1, juncPos1, juncDir1, \
+                    target_seq2, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
             
-            target_count1_2 = getDominantReadCount(dataframe1_2, dominant_group1, ed_threas)
+                target_count1_2 = getDominantReadCount(dataframe1_2, dominant_group1, ed_threas)
             
-            dataframe2_2 = getTargetDataFrame(bamfile2, juncChr2, juncPos2, juncDir2, \
-                target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
+                dataframe2_2 = getTargetDataFrame(bamfile2, juncChr2, juncPos2, juncDir2, \
+                    target_seq1, margin, validate_sequence_length, validate_sequence_minus_length, juncSeq, min_mapping_quality)
                 
-            target_count2_2 = getDominantReadCount(dataframe2_2, dominant_group2, ed_threas)
+                target_count2_2 = getDominantReadCount(dataframe2_2, dominant_group2, ed_threas)
                 
             # print(line +"\t"+target_seq1+"\t"+target_seq2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4)),file=hout)
-            print(line +"\t"+target_softclip1+"\t"+target_softclip2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))
-                +"\t"+str(target_count1) +"\t"+str(target_count2) +"\t"+str(target_count1_2) +"\t"+ str(target_count2_2),file=hout)
+            print_line = line +"\t"+target_softclip1+"\t"+target_softclip2+"\t"+str(round(dominant1,4))+"\t"+str(round(dominant2,4))+"\t"+str(target_count1) +"\t"+str(target_count2)
+           
+            if in_bam2 != None:
+                print_line = print_line +"\t"+str(target_count1_2) +"\t"+ str(target_count2_2)
+
+            print(print_line, file=hout)
           
     hout.close  
             
@@ -295,4 +306,5 @@ def curation_main(args):
     curation1(args.in_sv, args.in_bam1, args.in_bam2, args.output, args.margin, \
             args.ref_genome, args.max_depth, \
             args.validate_sequence_length, args.validate_sequence_minus_length,
-            args.ed_threashold, args.min_mapping_quality)
+            args.ed_threashold, args.min_mapping_quality, args.bedpe)
+
